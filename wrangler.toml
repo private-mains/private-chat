@@ -5,7 +5,7 @@ compatibility_date = "2026-03-23"
 [[d1_databases]]
 binding = "DB"
 database_name = "private-chat-db"
-database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
+database_id = "PUT_YOUR_REAL_D1_DATABASE_ID_HERE"
 
 [[r2_buckets]]
 binding = "FILES"
@@ -14,4 +14,3 @@ bucket_name = "private-chat-files"
 [vars]
 APP_NAME = "Private Chat"
 MAX_FILE_SIZE_BYTES = "3145728"
-SESSION_SECRET = "change_this_secret"
