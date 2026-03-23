@@ -1,0 +1,25 @@
+name = "private-chat-v1"
+main = "src/index.ts"
+compatibility_date = "2026-03-23"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "private-chat-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "private-chat-files"
+
+[vars]
+APP_NAME = "Private Chat"
+APP_URL = "https://your-worker-or-domain.example.com"
+MAX_FILE_SIZE_BYTES = "3145728"
+
+# Set this secret before deploy:
+# npx wrangler secret put SESSION_SECRET

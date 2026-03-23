@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Private Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="auth-view" class="screen">
+      <div class="auth-card">
+        <div class="brand-row">
+          <div class="brand-mark">PC</div>
+          <div>
+            <h1>Private Chat</h1>
+            <p>Secure client messaging on Cloudflare.</p>
+          </div>
+        </div>
+        <div class="tabs">
+          <button id="tab-login" class="tab active">Login</button>
+          <button id="tab-register" class="tab">Register</button>
+        </div>
+        <form id="login-form" class="stack">
+          <input name="email" type="email" placeholder="Email address" required />
+          <input name="password" type="password" placeholder="Password" required />
+          <button class="primary" type="submit">Sign in</button>
+        </form>
+        <form id="register-form" class="stack hidden">
+          <input name="displayName" type="text" placeholder="Display name" required />
+          <input name="email" type="email" placeholder="Email address" required />
+          <input name="password" type="password" minlength="8" placeholder="Password (8+ chars)" required />
+          <button class="primary" type="submit">Create account</button>
+        </form>
+        <p id="auth-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <div id="app-view" class="screen hidden">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <div>
+            <div class="kicker">Workspace</div>
+            <h2>Private Chat</h2>
+          </div>
+          <button id="logout-button" class="ghost">Logout</button>
+        </div>
+        <div class="me-box">
+          <div class="label">Signed in as</div>
+          <div id="me-name" class="me-name"></div>
+          <div id="me-email" class="me-email"></div>
+        </div>
+        <form id="new-chat-form" class="stack compact">
+          <input name="email" type="email" placeholder="Client email" required />
+          <button class="primary" type="submit">Start chat</button>
+        </form>
+        <div id="conversation-list" class="conversation-list"></div>
+      </aside>
+      <main class="chat-main">
+        <div id="empty-state" class="empty-state">
+          <h3>Select a conversation</h3>
+          <p>Start a new direct chat with your client by email.</p>
+        </div>
+        <section id="chat-panel" class="chat-panel hidden">
+          <header class="chat-header">
+            <div>
+              <div id="chat-title" class="chat-title"></div>
+              <div id="chat-subtitle" class="chat-subtitle"></div>
+            </div>
+          </header>
+          <div id="message-list" class="message-list"></div>
+          <form id="composer-form" class="composer">
+            <label class="attach-btn">
+              <input id="file-input" type="file" />
+              <span>Attach</span>
+            </label>
+            <input id="message-input" type="text" maxlength="2000" placeholder="Write a private message" />
+            <button class="primary" type="submit">Send</button>
+          </form>
+          <div id="composer-note" class="composer-note">Allowed files: jpg, png, webp, gif, pdf, txt. Max 3 MB.</div>
+        </section>
+      </main>
+    </div>
+
+    <template id="conversation-item-template">
+      <button class="conversation-item">
+        <div class="conversation-name"></div>
+        <div class="conversation-snippet"></div>
+      </button>
+    </template>
+
+    <template id="message-template">
+      <div class="message-row">
+        <div class="message-bubble">
+          <div class="message-meta"></div>
+          <div class="message-body"></div>
+          <div class="attachment-zone"></div>
+        </div>
+      </div>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
