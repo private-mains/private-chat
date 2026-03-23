@@ -10,18 +10,17 @@ export default {
 
     if (url.pathname === "/api/register" && request.method === "POST") {
       try {
-        const { email, password } = await request.json();
+        const body = await request.json();
+        const email = String(body.email || "").trim().toLowerCase();
+        const password = String(body.password || "");
 
         if (!email || !password) {
           return json({ error: "Email and password are required" }, 400);
         }
 
-        const cleanEmail = String(email).trim().toLowerCase();
-        const cleanPassword = String(password);
-
         const existingUser = await env.DB.prepare(
           `SELECT id FROM users WHERE email = ?`
-        ).bind(cleanEmail).first();
+        ).bind(email).first();
 
         if (existingUser) {
           return json({ error: "User already exists" }, 409);
@@ -33,34 +32,38 @@ export default {
         await env.DB.prepare(`
           INSERT INTO users (id, email, password_hash, created_at)
           VALUES (?, ?, ?, ?)
-        `).bind(id, cleanEmail, cleanPassword, created).run();
+        `).bind(id, email, password, created).run();
 
-        return json({ success: true, message: "Registered" });
+        return json({ success: true, message: "Registered successfully" });
       } catch (error) {
-        return json({ error: "Register failed" }, 500);
+        return json({
+          error: "Register failed",
+          details: String(error && error.message ? error.message : error)
+        }, 500);
       }
     }
 
     if (url.pathname === "/api/login" && request.method === "POST") {
       try {
-        const { email, password } = await request.json();
+        const body = await request.json();
+        const email = String(body.email || "").trim().toLowerCase();
+        const password = String(body.password || "");
 
         if (!email || !password) {
           return json({ error: "Email and password are required" }, 400);
         }
 
-        const cleanEmail = String(email).trim().toLowerCase();
-        const cleanPassword = String(password);
-
         const user = await env.DB.prepare(`
-          SELECT * FROM users WHERE email = ?
-        `).bind(cleanEmail).first();
+          SELECT id, email, password_hash
+          FROM users
+          WHERE email = ?
+        `).bind(email).first();
 
         if (!user) {
           return json({ error: "User not found" }, 401);
         }
 
-        if (user.password_hash !== cleanPassword) {
+        if (user.password_hash !== password) {
           return json({ error: "Wrong password" }, 401);
         }
 
@@ -70,16 +73,29 @@ export default {
           email: user.email
         });
       } catch (error) {
-        return json({ error: "Login failed" }, 500);
+        return json({
+          error: "Login failed",
+          details: String(error && error.message ? error.message : error)
+        }, 500);
       }
     }
 
     if (url.pathname === "/api/send" && request.method === "POST") {
       try {
-        const { userId, message } = await request.json();
+        const body = await request.json();
+        const userId = String(body.userId || "").trim();
+        const message = String(body.message || "").trim();
 
         if (!userId || !message) {
           return json({ error: "Missing userId or message" }, 400);
+        }
+
+        const user = await env.DB.prepare(
+          `SELECT id FROM users WHERE id = ?`
+        ).bind(userId).first();
+
+        if (!user) {
+          return json({ error: "Invalid user" }, 401);
         }
 
         const id = crypto.randomUUID();
@@ -88,23 +104,33 @@ export default {
         await env.DB.prepare(`
           INSERT INTO messages (id, user_id, body, created_at)
           VALUES (?, ?, ?, ?)
-        `).bind(id, userId, String(message).trim(), created).run();
+        `).bind(id, userId, message, created).run();
 
         return json({ success: true });
       } catch (error) {
-        return json({ error: "Send failed" }, 500);
+        return json({
+          error: "Send failed",
+          details: String(error && error.message ? error.message : error)
+        }, 500);
       }
     }
 
     if (url.pathname === "/api/messages" && request.method === "GET") {
       try {
         const rows = await env.DB.prepare(`
-          SELECT * FROM messages ORDER BY created_at DESC LIMIT 50
+          SELECT messages.id, messages.body, messages.created_at, users.email
+          FROM messages
+          LEFT JOIN users ON users.id = messages.user_id
+          ORDER BY messages.created_at DESC
+          LIMIT 50
         `).all();
 
         return json(rows.results || []);
       } catch (error) {
-        return json({ error: "Could not load messages" }, 500);
+        return json({
+          error: "Could not load messages",
+          details: String(error && error.message ? error.message : error)
+        }, 500);
       }
     }
 
@@ -122,97 +148,145 @@ function json(data, status = 200) {
 }
 
 function htmlPage() {
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Private Chat V2</title>
+  <title>Private Chat V3</title>
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
-      padding: 24px;
       margin: 0;
-      background: #f5f5f5;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .wrap {
+      max-width: 520px;
+      margin: 0 auto;
     }
     .card {
-      max-width: 420px;
-      background: white;
+      background: #fff;
+      border-radius: 14px;
       padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    .sub {
+      color: #6b7280;
+      font-size: 13px;
+      margin-bottom: 16px;
     }
     input, textarea, button {
       width: 100%;
-      box-sizing: border-box;
-      padding: 10px;
-      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
       font-size: 14px;
     }
-    .row {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
+    input, textarea {
+      background: #fff;
+      margin-bottom: 10px;
     }
-    .row button {
-      width: auto;
-      flex: 1;
+    button {
+      border: none;
+      background: #111827;
+      color: white;
       cursor: pointer;
+    }
+    button:hover {
+      opacity: 0.92;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
     }
     #chat {
       display: none;
-      margin-top: 20px;
+      margin-top: 18px;
+    }
+    #welcome {
+      font-size: 13px;
+      color: #374151;
+      margin-bottom: 10px;
     }
     #messages {
-      margin-top: 15px;
-      background: #fafafa;
-      border: 1px solid #ddd;
-      border-radius: 8px;
+      margin-top: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
       padding: 12px;
-      max-height: 300px;
+      max-height: 320px;
       overflow-y: auto;
     }
     .msg {
-      padding: 8px 10px;
-      margin-bottom: 8px;
-      background: #e9f2ff;
-      border-radius: 8px;
+      background: #e5edff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
     }
-    .small {
-      color: #666;
+    .meta {
       font-size: 12px;
-      margin-top: 6px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .error {
+      margin-top: 10px;
+      color: #b91c1c;
+      font-size: 13px;
+      min-height: 18px;
+    }
+    .ok {
+      color: #047857;
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Private Chat V2</h2>
-    <div class="small">Login fix test</div>
+  <div class="wrap">
+    <div class="card">
+      <h2>Private Chat V3</h2>
+      <div class="sub">Working starter build</div>
 
-    <input id="email" type="email" placeholder="Email" />
-    <input id="password" type="password" placeholder="Password" />
+      <input id="email" type="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="Password" />
 
-    <div class="row">
-      <button onclick="registerUser()">Register</button>
-      <button onclick="loginUser()">Login</button>
-    </div>
+      <div class="row">
+        <button onclick="registerUser()">Register</button>
+        <button onclick="loginUser()">Login</button>
+      </div>
 
-    <div id="chat">
-      <hr />
-      <div class="small" id="welcome"></div>
-      <textarea id="msg" placeholder="Type message"></textarea>
-      <button onclick="sendMessage()">Send</button>
-      <div id="messages"></div>
+      <div id="status" class="error"></div>
+
+      <div id="chat">
+        <hr />
+        <div id="welcome"></div>
+        <textarea id="msg" rows="4" placeholder="Type message"></textarea>
+        <button onclick="sendMessage()">Send Message</button>
+        <div id="messages"></div>
+      </div>
     </div>
   </div>
 
   <script>
     let userId = null;
 
+    function setStatus(text, ok = false) {
+      const el = document.getElementById("status");
+      el.textContent = text || "";
+      el.className = ok ? "error ok" : "error";
+    }
+
     async function registerUser() {
       try {
+        setStatus("");
+
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
 
@@ -226,20 +300,22 @@ function htmlPage() {
 
         const data = await res.json();
 
-        if (data.error) {
-          alert(data.error);
+        if (!res.ok) {
+          setStatus(data.error || "Register failed");
           return;
         }
 
-        alert("Registered successfully");
+        setStatus(data.message || "Registered successfully", true);
       } catch (err) {
-        console.error("REGISTER ERROR:", err);
-        alert("Register request failed");
+        console.error(err);
+        setStatus("Register request failed");
       }
     }
 
     async function loginUser() {
       try {
+        setStatus("");
+
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
 
@@ -252,39 +328,36 @@ function htmlPage() {
         });
 
         const data = await res.json();
-        console.log("LOGIN RESPONSE:", data);
 
-        if (data.error) {
-          alert(data.error);
+        if (!res.ok) {
+          setStatus(data.error || "Login failed");
           return;
         }
 
-        if (data.userId) {
-          userId = data.userId;
-          document.getElementById("chat").style.display = "block";
-          document.getElementById("welcome").textContent = "Logged in as: " + data.email;
-          alert("Login successful");
-          await loadMessages();
-        } else {
-          alert("Login failed");
-        }
+        userId = data.userId;
+        document.getElementById("chat").style.display = "block";
+        document.getElementById("welcome").textContent = "Logged in as: " + data.email;
+        setStatus("Login successful", true);
+        await loadMessages();
       } catch (err) {
-        console.error("LOGIN ERROR:", err);
-        alert("Login request failed");
+        console.error(err);
+        setStatus("Login request failed");
       }
     }
 
     async function sendMessage() {
       try {
+        setStatus("");
+
         const message = document.getElementById("msg").value.trim();
 
         if (!userId) {
-          alert("Please login first");
+          setStatus("Please login first");
           return;
         }
 
         if (!message) {
-          alert("Type a message");
+          setStatus("Type a message");
           return;
         }
 
@@ -301,16 +374,17 @@ function htmlPage() {
 
         const data = await res.json();
 
-        if (data.error) {
-          alert(data.error);
+        if (!res.ok) {
+          setStatus(data.error || "Send failed");
           return;
         }
 
         document.getElementById("msg").value = "";
+        setStatus("Message sent", true);
         await loadMessages();
       } catch (err) {
-        console.error("SEND ERROR:", err);
-        alert("Send request failed");
+        console.error(err);
+        setStatus("Send request failed");
       }
     }
 
@@ -319,23 +393,32 @@ function htmlPage() {
         const res = await fetch("/api/messages");
         const data = await res.json();
 
-        if (!Array.isArray(data)) {
-          alert(data.error || "Could not load messages");
+        if (!res.ok || !Array.isArray(data)) {
+          setStatus((data && data.error) || "Could not load messages");
           return;
         }
 
-        const messagesBox = document.getElementById("messages");
-        messagesBox.innerHTML = data.map(function(m) {
-          return '<div class="msg">' + escapeHtml(m.body || "") + '</div>';
+        const box = document.getElementById("messages");
+
+        box.innerHTML = data.map((m) => {
+          const email = escapeHtml(m.email || "Unknown user");
+          const body = escapeHtml(m.body || "");
+          const created = escapeHtml(m.created_at || "");
+          return \`
+            <div class="msg">
+              <div class="meta">\${email} • \${created}</div>
+              <div>\${body}</div>
+            </div>
+          \`;
         }).join("");
       } catch (err) {
-        console.error("LOAD ERROR:", err);
-        alert("Loading messages failed");
+        console.error(err);
+        setStatus("Loading messages failed");
       }
     }
 
     function escapeHtml(str) {
-      return str
+      return String(str)
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
@@ -344,6 +427,5 @@ function htmlPage() {
     }
   </script>
 </body>
-</html>
-`;
+</html>`;
 }
