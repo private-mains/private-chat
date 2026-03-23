@@ -1,21 +1,13 @@
 # Private Chat
 
-Simple private chat app using Cloudflare Workers + D1.
+Simple Cloudflare Worker + D1 chat starter.
 
 ## Features
-- Email login
-- Private messaging
-- Simple UI
+- Register
+- Login
+- Send messages
+- Read messages
 
-## Setup
-
-1. Create D1 database
-2. Run migration
-3. Add database ID to wrangler.toml
-4. Deploy
-
-## Run
-
-npm install
-npx wrangler dev
-npx wrangler deploy
+## Notes
+This is a starter version for testing.
+It is not yet production-grade secure chat.
