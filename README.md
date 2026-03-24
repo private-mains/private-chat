@@ -1,13 +1,19 @@
 # Private Chat
 
-Simple Cloudflare Worker + D1 chat starter.
+Simple private chat starter built with Cloudflare Workers and D1.
 
 ## Features
-- Register
-- Login
-- Send messages
-- Read messages
+- Numeric user number login
+- Profile name
+- Profile picture URL
+- Start private 1-to-1 chat by number
+- Send text messages
+- Edit your messages
+- Delete your messages
+- Hide chat from your side
 
-## Notes
-This is a starter version for testing.
-It is not yet production-grade secure chat.
+## Setup
+1. Create D1 database
+2. Add D1 binding named DB
+3. Run migrations/0001.sql
+4. Deploy to Cloudflare
