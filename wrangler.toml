@@ -3,4 +3,4 @@ main = "src/index.js"
 compatibility_date = "2026-03-23"
 
 [vars]
-APP_NAME = "Private Chat
+APP_NAME = "Private Chat"
