@@ -15,11 +15,11 @@ export default {
           return json({ error: "Missing device secret" }, 400);
         }
 
-        const user = await env.DB.prepare(`
-          SELECT id, user_number, profile_name, profile_picture_url
-          FROM users
-          WHERE device_secret = ?
-        `).bind(deviceSecret).first();
+        const user = await env.DB.prepare(
+          `SELECT id, user_number, profile_name, profile_picture_url
+           FROM users
+           WHERE device_secret = ?`
+        ).bind(deviceSecret).first();
 
         if (!user) {
           return json({ found: false });
@@ -50,11 +50,11 @@ export default {
           return json({ error: "Profile name is required" }, 400);
         }
 
-        const existing = await env.DB.prepare(`
-          SELECT id, user_number, profile_name, profile_picture_url
-          FROM users
-          WHERE device_secret = ?
-        `).bind(deviceSecret).first();
+        const existing = await env.DB.prepare(
+          `SELECT id, user_number, profile_name, profile_picture_url
+           FROM users
+           WHERE device_secret = ?`
+        ).bind(deviceSecret).first();
 
         if (existing) {
           return json({
@@ -72,10 +72,10 @@ export default {
         const userNumber = await generateUserNumber(env.DB);
         const createdAt = nowIso();
 
-        await env.DB.prepare(`
-          INSERT INTO users (id, user_number, profile_name, profile_picture_url, device_secret, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(
+        await env.DB.prepare(
+          `INSERT INTO users (id, user_number, profile_name, profile_picture_url, device_secret, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(
           userId,
           userNumber,
           profileName,
@@ -109,11 +109,11 @@ export default {
           return json({ error: "Missing profile data" }, 400);
         }
 
-        await env.DB.prepare(`
-          UPDATE users
-          SET profile_name = ?, profile_picture_url = ?
-          WHERE id = ?
-        `).bind(profileName, profilePictureUrl || null, currentUserId).run();
+        await env.DB.prepare(
+          `UPDATE users
+           SET profile_name = ?, profile_picture_url = ?
+           WHERE id = ?`
+        ).bind(profileName, profilePictureUrl || null, currentUserId).run();
 
         return json({ success: true });
       } catch (error) {
@@ -131,11 +131,11 @@ export default {
           return json({ error: "Missing user data" }, 400);
         }
 
-        const targetUser = await env.DB.prepare(`
-          SELECT id, user_number, profile_name, profile_picture_url
-          FROM users
-          WHERE user_number = ?
-        `).bind(targetUserNumber).first();
+        const targetUser = await env.DB.prepare(
+          `SELECT id, user_number, profile_name, profile_picture_url
+           FROM users
+           WHERE user_number = ?`
+        ).bind(targetUserNumber).first();
 
         if (!targetUser) {
           return json({ error: "User not found" }, 404);
@@ -149,28 +149,28 @@ export default {
         const userA = ordered[0];
         const userB = ordered[1];
 
-        let conversation = await env.DB.prepare(`
-          SELECT id
-          FROM conversations
-          WHERE user_a_id = ? AND user_b_id = ?
-        `).bind(userA, userB).first();
+        let conversation = await env.DB.prepare(
+          `SELECT id
+           FROM conversations
+           WHERE user_a_id = ? AND user_b_id = ?`
+        ).bind(userA, userB).first();
 
         if (!conversation) {
           const conversationId = crypto.randomUUID();
           const timestamp = nowIso();
 
-          await env.DB.prepare(`
-            INSERT INTO conversations (id, user_a_id, user_b_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-          `).bind(conversationId, userA, userB, timestamp, timestamp).run();
+          await env.DB.prepare(
+            `INSERT INTO conversations (id, user_a_id, user_b_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`
+          ).bind(conversationId, userA, userB, timestamp, timestamp).run();
 
           conversation = { id: conversationId };
         }
 
-        await env.DB.prepare(`
-          DELETE FROM hidden_conversations
-          WHERE conversation_id = ? AND user_id IN (?, ?)
-        `).bind(conversation.id, currentUserId, targetUser.id).run();
+        await env.DB.prepare(
+          `DELETE FROM hidden_conversations
+           WHERE conversation_id = ? AND user_id IN (?, ?)`
+        ).bind(conversation.id, currentUserId, targetUser.id).run();
 
         return json({
           success: true,
@@ -190,39 +190,40 @@ export default {
     if (url.pathname === "/api/conversations" && request.method === "GET") {
       try {
         const currentUserId = String(url.searchParams.get("currentUserId") || "").trim();
+
         if (!currentUserId) {
           return json({ error: "Missing current user" }, 400);
         }
 
-        const conversations = await env.DB.prepare(`
-          SELECT
-            c.id,
-            c.updated_at,
-            u.id AS other_user_id,
-            u.user_number AS other_user_number,
-            u.profile_name AS other_profile_name,
-            u.profile_picture_url AS other_profile_picture_url,
-            (
-              SELECT m.body
-              FROM messages m
-              WHERE m.conversation_id = c.id AND m.is_deleted = 0
-              ORDER BY m.created_at DESC
-              LIMIT 1
-            ) AS last_message
-          FROM conversations c
-          JOIN users u
-            ON u.id = CASE
-              WHEN c.user_a_id = ? THEN c.user_b_id
-              ELSE c.user_a_id
-            END
-          LEFT JOIN hidden_conversations hc
-            ON hc.conversation_id = c.id AND hc.user_id = ?
-          WHERE (c.user_a_id = ? OR c.user_b_id = ?)
-            AND hc.id IS NULL
-          ORDER BY c.updated_at DESC
-        `).bind(currentUserId, currentUserId, currentUserId, currentUserId).all();
+        const result = await env.DB.prepare(
+          `SELECT
+             c.id,
+             c.updated_at,
+             u.id AS other_user_id,
+             u.user_number AS other_user_number,
+             u.profile_name AS other_profile_name,
+             u.profile_picture_url AS other_profile_picture_url,
+             (
+               SELECT m.body
+               FROM messages m
+               WHERE m.conversation_id = c.id AND m.is_deleted = 0
+               ORDER BY m.created_at DESC
+               LIMIT 1
+             ) AS last_message
+           FROM conversations c
+           JOIN users u
+             ON u.id = CASE
+               WHEN c.user_a_id = ? THEN c.user_b_id
+               ELSE c.user_a_id
+             END
+           LEFT JOIN hidden_conversations hc
+             ON hc.conversation_id = c.id AND hc.user_id = ?
+           WHERE (c.user_a_id = ? OR c.user_b_id = ?)
+             AND hc.id IS NULL
+           ORDER BY c.updated_at DESC`
+        ).bind(currentUserId, currentUserId, currentUserId, currentUserId).all();
 
-        return json({ success: true, conversations: conversations.results || [] });
+        return json({ success: true, conversations: result.results || [] });
       } catch (error) {
         return json({ error: "Load conversations failed: " + errMsg(error) }, 500);
       }
@@ -242,22 +243,22 @@ export default {
           return json({ error: "Access denied" }, 403);
         }
 
-        const rows = await env.DB.prepare(`
-          SELECT
-            m.id,
-            m.body,
-            m.created_at,
-            m.updated_at,
-            m.sender_id,
-            u.profile_name,
-            u.user_number
-          FROM messages m
-          JOIN users u ON u.id = m.sender_id
-          WHERE m.conversation_id = ? AND m.is_deleted = 0
-          ORDER BY m.created_at ASC
-        `).bind(conversationId).all();
+        const result = await env.DB.prepare(
+          `SELECT
+             m.id,
+             m.body,
+             m.created_at,
+             m.updated_at,
+             m.sender_id,
+             u.profile_name,
+             u.user_number
+           FROM messages m
+           JOIN users u ON u.id = m.sender_id
+           WHERE m.conversation_id = ? AND m.is_deleted = 0
+           ORDER BY m.created_at ASC`
+        ).bind(conversationId).all();
 
-        return json({ success: true, messages: rows.results || [] });
+        return json({ success: true, messages: result.results || [] });
       } catch (error) {
         return json({ error: "Load messages failed: " + errMsg(error) }, 500);
       }
@@ -282,16 +283,16 @@ export default {
         const messageId = crypto.randomUUID();
         const timestamp = nowIso();
 
-        await env.DB.prepare(`
-          INSERT INTO messages (id, conversation_id, sender_id, body, created_at, updated_at, is_deleted)
-          VALUES (?, ?, ?, ?, ?, ?, 0)
-        `).bind(messageId, conversationId, senderId, message, timestamp, timestamp).run();
+        await env.DB.prepare(
+          `INSERT INTO messages (id, conversation_id, sender_id, body, created_at, updated_at, is_deleted)
+           VALUES (?, ?, ?, ?, ?, ?, 0)`
+        ).bind(messageId, conversationId, senderId, message, timestamp, timestamp).run();
 
-        await env.DB.prepare(`
-          UPDATE conversations
-          SET updated_at = ?
-          WHERE id = ?
-        `).bind(timestamp, conversationId).run();
+        await env.DB.prepare(
+          `UPDATE conversations
+           SET updated_at = ?
+           WHERE id = ?`
+        ).bind(timestamp, conversationId).run();
 
         return json({ success: true });
       } catch (error) {
@@ -310,11 +311,11 @@ export default {
           return json({ error: "Missing edit data" }, 400);
         }
 
-        const row = await env.DB.prepare(`
-          SELECT id, conversation_id, sender_id
-          FROM messages
-          WHERE id = ? AND is_deleted = 0
-        `).bind(messageId).first();
+        const row = await env.DB.prepare(
+          `SELECT id, conversation_id, sender_id
+           FROM messages
+           WHERE id = ? AND is_deleted = 0`
+        ).bind(messageId).first();
 
         if (!row) {
           return json({ error: "Message not found" }, 404);
@@ -326,17 +327,17 @@ export default {
 
         const timestamp = nowIso();
 
-        await env.DB.prepare(`
-          UPDATE messages
-          SET body = ?, updated_at = ?
-          WHERE id = ?
-        `).bind(message, timestamp, messageId).run();
+        await env.DB.prepare(
+          `UPDATE messages
+           SET body = ?, updated_at = ?
+           WHERE id = ?`
+        ).bind(message, timestamp, messageId).run();
 
-        await env.DB.prepare(`
-          UPDATE conversations
-          SET updated_at = ?
-          WHERE id = ?
-        `).bind(timestamp, row.conversation_id).run();
+        await env.DB.prepare(
+          `UPDATE conversations
+           SET updated_at = ?
+           WHERE id = ?`
+        ).bind(timestamp, row.conversation_id).run();
 
         return json({ success: true });
       } catch (error) {
@@ -354,11 +355,11 @@ export default {
           return json({ error: "Missing delete data" }, 400);
         }
 
-        const row = await env.DB.prepare(`
-          SELECT id, conversation_id, sender_id
-          FROM messages
-          WHERE id = ? AND is_deleted = 0
-        `).bind(messageId).first();
+        const row = await env.DB.prepare(
+          `SELECT id, conversation_id, sender_id
+           FROM messages
+           WHERE id = ? AND is_deleted = 0`
+        ).bind(messageId).first();
 
         if (!row) {
           return json({ error: "Message not found" }, 404);
@@ -370,17 +371,17 @@ export default {
 
         const timestamp = nowIso();
 
-        await env.DB.prepare(`
-          UPDATE messages
-          SET is_deleted = 1, updated_at = ?
-          WHERE id = ?
-        `).bind(timestamp, messageId).run();
+        await env.DB.prepare(
+          `UPDATE messages
+           SET is_deleted = 1, updated_at = ?
+           WHERE id = ?`
+        ).bind(timestamp, messageId).run();
 
-        await env.DB.prepare(`
-          UPDATE conversations
-          SET updated_at = ?
-          WHERE id = ?
-        `).bind(timestamp, row.conversation_id).run();
+        await env.DB.prepare(
+          `UPDATE conversations
+           SET updated_at = ?
+           WHERE id = ?`
+        ).bind(timestamp, row.conversation_id).run();
 
         return json({ success: true });
       } catch (error) {
@@ -403,10 +404,10 @@ export default {
           return json({ error: "Access denied" }, 403);
         }
 
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO hidden_conversations (id, conversation_id, user_id, hidden_at)
-          VALUES (?, ?, ?, ?)
-        `).bind(crypto.randomUUID(), conversationId, currentUserId, nowIso()).run();
+        await env.DB.prepare(
+          `INSERT OR REPLACE INTO hidden_conversations (id, conversation_id, user_id, hidden_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(crypto.randomUUID(), conversationId, currentUserId, nowIso()).run();
 
         return json({ success: true });
       } catch (error) {
@@ -440,11 +441,11 @@ function errMsg(error) {
 }
 
 async function canAccessConversation(db, userId, conversationId) {
-  const row = await db.prepare(`
-    SELECT id
-    FROM conversations
-    WHERE id = ? AND (user_a_id = ? OR user_b_id = ?)
-  `).bind(conversationId, userId, userId).first();
+  const row = await db.prepare(
+    `SELECT id
+     FROM conversations
+     WHERE id = ? AND (user_a_id = ? OR user_b_id = ?)`
+  ).bind(conversationId, userId, userId).first();
 
   return !!row;
 }
@@ -452,9 +453,9 @@ async function canAccessConversation(db, userId, conversationId) {
 async function generateUserNumber(db) {
   while (true) {
     const number = String(Math.floor(100000000 + Math.random() * 900000000));
-    const exists = await db.prepare(`
-      SELECT id FROM users WHERE user_number = ?
-    `).bind(number).first();
+    const exists = await db.prepare(
+      `SELECT id FROM users WHERE user_number = ?`
+    ).bind(number).first();
 
     if (!exists) {
       return number;
@@ -463,7 +464,8 @@ async function generateUserNumber(db) {
 }
 
 function renderApp() {
-  return `<!DOCTYPE html>
+  return `
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -603,11 +605,9 @@ function renderApp() {
       margin-bottom: 10px;
       cursor: pointer;
       background: #fafafa;
-      transition: 0.15s ease;
     }
     .conversation-item:hover {
       background: #f3f4f6;
-      transform: translateY(-1px);
     }
     .chat-header {
       display: flex;
@@ -632,7 +632,6 @@ function renderApp() {
       border-radius: 14px;
       margin-bottom: 12px;
       word-break: break-word;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
     }
     .mine {
       margin-left: auto;
@@ -690,7 +689,7 @@ function renderApp() {
       <div class="status" id="setupStatus"></div>
       <input id="setupProfileName" placeholder="Your profile name" />
       <input id="setupProfilePictureUrl" placeholder="Profile picture URL (optional)" />
-      <button onclick="createProfile()">Continue</button>
+      <button id="createProfileBtn">Continue</button>
     </div>
 
     <div id="appPanel" class="layout hidden">
@@ -709,23 +708,21 @@ function renderApp() {
 
         <div class="section-title">Start chat</div>
         <input id="startChatUserNumber" placeholder="Enter user number" />
-        <button onclick="startChat()">Open chat</button>
+        <button id="startChatBtn">Open chat</button>
 
         <div class="section-title" style="margin-top:16px;">Edit profile</div>
         <input id="editProfileName" placeholder="Profile name" />
         <input id="editProfilePictureUrl" placeholder="Profile picture URL" />
-        <button class="secondary" onclick="updateProfile()">Save profile</button>
+        <button class="secondary" id="saveProfileBtn">Save profile</button>
 
         <div class="section-title" style="margin-top:16px;">Your chats</div>
         <div id="conversationList"></div>
 
-        <button class="danger" style="margin-top:10px;" onclick="resetThisDevice()">Reset this device</button>
+        <button class="danger" style="margin-top:10px;" id="resetDeviceBtn">Reset this device</button>
       </div>
 
       <div class="card">
-        <div id="chatEmptyState" class="empty">
-          Open a chat by user number.
-        </div>
+        <div id="chatEmptyState" class="empty">Open a chat by user number.</div>
 
         <div id="chatPanel" class="hidden">
           <div class="chat-header">
@@ -736,8 +733,8 @@ function renderApp() {
                 <div class="muted">User number: <span id="chatUserNumber"></span></div>
               </div>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="secondary" onclick="hideConversation()">Hide chat</button>
+            <div>
+              <button class="secondary" id="hideChatBtn">Hide chat</button>
             </div>
           </div>
 
@@ -745,7 +742,7 @@ function renderApp() {
           <div id="messagesBox" class="messages"></div>
 
           <textarea id="messageInput" placeholder="Type your message"></textarea>
-          <button onclick="sendMessage()">Send Message</button>
+          <button id="sendMessageBtn">Send Message</button>
         </div>
       </div>
     </div>
@@ -765,7 +762,7 @@ function renderApp() {
       return secret;
     }
 
-    function setStatus(id, text, ok = false) {
+    function setStatus(id, text, ok) {
       const el = document.getElementById(id);
       el.textContent = text || "";
       el.className = ok ? "status ok" : "status";
@@ -773,11 +770,11 @@ function renderApp() {
 
     function escapeHtml(str) {
       return String(str || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function avatarValue(url) {
@@ -828,7 +825,7 @@ function renderApp() {
 
     async function createProfile() {
       try {
-        setStatus("setupStatus", "");
+        setStatus("setupStatus", "", false);
 
         const profileName = document.getElementById("setupProfileName").value.trim();
         const profilePictureUrl = document.getElementById("setupProfilePictureUrl").value.trim();
@@ -837,8 +834,8 @@ function renderApp() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            profileName,
-            profilePictureUrl,
+            profileName: profileName,
+            profilePictureUrl: profilePictureUrl,
             deviceSecret: getDeviceSecret()
           })
         });
@@ -846,7 +843,7 @@ function renderApp() {
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("setupStatus", data.error || "Could not create profile");
+          setStatus("setupStatus", data.error || "Could not create profile", false);
           return;
         }
 
@@ -854,13 +851,13 @@ function renderApp() {
         showApp();
         setStatus("leftStatus", "Your user number is " + currentUser.userNumber, true);
       } catch (err) {
-        setStatus("setupStatus", "Create profile failed");
+        setStatus("setupStatus", "Create profile failed", false);
       }
     }
 
     async function updateProfile() {
       try {
-        setStatus("leftStatus", "");
+        setStatus("leftStatus", "", false);
 
         const profileName = document.getElementById("editProfileName").value.trim();
         const profilePictureUrl = document.getElementById("editProfilePictureUrl").value.trim();
@@ -870,15 +867,15 @@ function renderApp() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             currentUserId: currentUser.id,
-            profileName,
-            profilePictureUrl
+            profileName: profileName,
+            profilePictureUrl: profilePictureUrl
           })
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("leftStatus", data.error || "Could not update profile");
+          setStatus("leftStatus", data.error || "Could not update profile", false);
           return;
         }
 
@@ -887,23 +884,23 @@ function renderApp() {
         showApp();
         setStatus("leftStatus", "Profile updated", true);
       } catch (err) {
-        setStatus("leftStatus", "Update profile failed");
+        setStatus("leftStatus", "Update profile failed", false);
       }
     }
 
     function resetThisDevice() {
-      if (!confirm("Reset this device profile? This will remove local access on this browser.")) return;
+      if (!confirm("Reset this device profile?")) return;
       localStorage.removeItem("privateChatDeviceSecret");
       location.reload();
     }
 
     async function startChat() {
       try {
-        setStatus("leftStatus", "");
+        setStatus("leftStatus", "", false);
 
         const targetUserNumber = document.getElementById("startChatUserNumber").value.trim();
         if (!targetUserNumber) {
-          setStatus("leftStatus", "Enter a user number");
+          setStatus("leftStatus", "Enter a user number", false);
           return;
         }
 
@@ -912,14 +909,14 @@ function renderApp() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             currentUserId: currentUser.id,
-            targetUserNumber
+            targetUserNumber: targetUserNumber
           })
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("leftStatus", data.error || "Could not start chat");
+          setStatus("leftStatus", data.error || "Could not start chat", false);
           return;
         }
 
@@ -930,7 +927,7 @@ function renderApp() {
         await loadConversations();
         await openChat(currentConversationId, currentChatTarget);
       } catch (err) {
-        setStatus("leftStatus", "Start chat failed");
+        setStatus("leftStatus", "Start chat failed", false);
       }
     }
 
@@ -938,10 +935,10 @@ function renderApp() {
       try {
         const res = await fetch("/api/conversations?currentUserId=" + encodeURIComponent(currentUser.id));
         const data = await res.json();
-
         const list = document.getElementById("conversationList");
+
         if (!res.ok) {
-          setStatus("leftStatus", data.error || "Could not load conversations");
+          setStatus("leftStatus", data.error || "Could not load conversations", false);
           list.innerHTML = "";
           return;
         }
@@ -952,22 +949,33 @@ function renderApp() {
           return;
         }
 
-        list.innerHTML = items.map(item => {
-          return \`
-            <div class="conversation-item" onclick="openChat('\${item.id}', {
-              id: '\${item.other_user_id}',
-              userNumber: '\${item.other_user_number}',
-              profileName: \${JSON.stringify(item.other_profile_name || "")},
-              profilePictureUrl: \${JSON.stringify(item.other_profile_picture_url || "")}
-            })">
-              <div><strong>\${escapeHtml(item.other_profile_name || "Unknown")}</strong></div>
-              <div class="muted">\${escapeHtml(item.other_user_number || "")}</div>
-              <div class="muted">\${escapeHtml(item.last_message || "")}</div>
-            </div>
-          \`;
-        }).join("");
+        let html = "";
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const profileName = JSON.stringify(item.other_profile_name || "");
+          const profilePictureUrl = JSON.stringify(item.other_profile_picture_url || "");
+          html += '<div class="conversation-item" data-id="' + item.id + '" data-other-id="' + item.other_user_id + '" data-other-number="' + escapeHtml(item.other_user_number || "") + '" data-other-name=' + profileName + ' data-other-photo=' + profilePictureUrl + '>';
+          html += '<div><strong>' + escapeHtml(item.other_profile_name || "Unknown") + '</strong></div>';
+          html += '<div class="muted">' + escapeHtml(item.other_user_number || "") + '</div>';
+          html += '<div class="muted">' + escapeHtml(item.last_message || "") + '</div>';
+          html += '</div>';
+        }
+
+        list.innerHTML = html;
+
+        const cards = list.querySelectorAll(".conversation-item");
+        cards.forEach(function(card) {
+          card.addEventListener("click", function() {
+            openChat(card.getAttribute("data-id"), {
+              id: card.getAttribute("data-other-id"),
+              userNumber: card.getAttribute("data-other-number"),
+              profileName: JSON.parse(card.getAttribute("data-other-name")),
+              profilePictureUrl: JSON.parse(card.getAttribute("data-other-photo"))
+            });
+          });
+        });
       } catch (err) {
-        setStatus("leftStatus", "Load conversations failed");
+        setStatus("leftStatus", "Load conversations failed", false);
       }
     }
 
@@ -987,16 +995,13 @@ function renderApp() {
 
     async function loadMessages() {
       try {
-        setStatus("chatStatus", "");
+        setStatus("chatStatus", "", false);
 
-        const res = await fetch(
-          "/api/messages?conversationId=" + encodeURIComponent(currentConversationId) +
-          "&currentUserId=" + encodeURIComponent(currentUser.id)
-        );
+        const res = await fetch("/api/messages?conversationId=" + encodeURIComponent(currentConversationId) + "&currentUserId=" + encodeURIComponent(currentUser.id));
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("chatStatus", data.error || "Could not load messages");
+          setStatus("chatStatus", data.error || "Could not load messages", false);
           return;
         }
 
@@ -1008,44 +1013,55 @@ function renderApp() {
           return;
         }
 
-        box.innerHTML = messages.map(msg => {
+        let html = "";
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
           const mine = msg.sender_id === currentUser.id;
-          return \`
-            <div class="message \${mine ? "mine" : "theirs"}">
-              <div class="message-meta">
-                \${escapeHtml(msg.profile_name || "")} • \${escapeHtml(msg.user_number || "")}
-              </div>
-              <div>\${escapeHtml(msg.body || "")}</div>
-              <div class="message-meta">
-                \${escapeHtml(msg.updated_at && msg.updated_at !== msg.created_at ? "Edited • " : "")}\${escapeHtml(msg.updated_at || msg.created_at || "")}
-              </div>
-              \${mine ? \`
-                <div class="message-actions">
-                  <button class="secondary" onclick="editMessage('\${msg.id}', \${JSON.stringify(msg.body || "")})">Edit</button>
-                  <button class="danger" onclick="deleteMessage('\${msg.id}')">Delete</button>
-                </div>
-              \` : ""}
-            </div>
-          \`;
-        }).join("");
+          html += '<div class="message ' + (mine ? "mine" : "theirs") + '">';
+          html += '<div class="message-meta">' + escapeHtml(msg.profile_name || "") + ' • ' + escapeHtml(msg.user_number || "") + '</div>';
+          html += '<div>' + escapeHtml(msg.body || "") + '</div>';
+          html += '<div class="message-meta">' + escapeHtml((msg.updated_at && msg.updated_at !== msg.created_at ? "Edited • " : "") + (msg.updated_at || msg.created_at || "")) + '</div>';
+          if (mine) {
+            html += '<div class="message-actions">';
+            html += '<button class="secondary" data-edit-id="' + msg.id + '" data-edit-body="' + escapeHtml(msg.body || "") + '">Edit</button>';
+            html += '<button class="danger" data-delete-id="' + msg.id + '">Delete</button>';
+            html += '</div>';
+          }
+          html += '</div>';
+        }
 
+        box.innerHTML = html;
         box.scrollTop = box.scrollHeight;
+
+        const editButtons = box.querySelectorAll("[data-edit-id]");
+        editButtons.forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            editMessage(btn.getAttribute("data-edit-id"), btn.getAttribute("data-edit-body"));
+          });
+        });
+
+        const deleteButtons = box.querySelectorAll("[data-delete-id]");
+        deleteButtons.forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            deleteMessage(btn.getAttribute("data-delete-id"));
+          });
+        });
       } catch (err) {
-        setStatus("chatStatus", "Load messages failed");
+        setStatus("chatStatus", "Load messages failed", false);
       }
     }
 
     async function sendMessage() {
       try {
-        setStatus("chatStatus", "");
+        setStatus("chatStatus", "", false);
 
         const message = document.getElementById("messageInput").value.trim();
         if (!currentConversationId) {
-          setStatus("chatStatus", "Open a chat first");
+          setStatus("chatStatus", "Open a chat first", false);
           return;
         }
         if (!message) {
-          setStatus("chatStatus", "Type a message");
+          setStatus("chatStatus", "Type a message", false);
           return;
         }
 
@@ -1055,14 +1071,14 @@ function renderApp() {
           body: JSON.stringify({
             conversationId: currentConversationId,
             senderId: currentUser.id,
-            message
+            message: message
           })
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("chatStatus", data.error || "Could not send message");
+          setStatus("chatStatus", data.error || "Could not send message", false);
           return;
         }
 
@@ -1070,7 +1086,7 @@ function renderApp() {
         await loadMessages();
         await loadConversations();
       } catch (err) {
-        setStatus("chatStatus", "Send message failed");
+        setStatus("chatStatus", "Send message failed", false);
       }
     }
 
@@ -1083,7 +1099,7 @@ function renderApp() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            messageId,
+            messageId: messageId,
             currentUserId: currentUser.id,
             message: nextBody.trim()
           })
@@ -1092,7 +1108,7 @@ function renderApp() {
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("chatStatus", data.error || "Could not edit message");
+          setStatus("chatStatus", data.error || "Could not edit message", false);
           return;
         }
 
@@ -1100,7 +1116,7 @@ function renderApp() {
         await loadMessages();
         await loadConversations();
       } catch (err) {
-        setStatus("chatStatus", "Edit message failed");
+        setStatus("chatStatus", "Edit message failed", false);
       }
     }
 
@@ -1112,7 +1128,7 @@ function renderApp() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            messageId,
+            messageId: messageId,
             currentUserId: currentUser.id
           })
         });
@@ -1120,7 +1136,7 @@ function renderApp() {
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("chatStatus", data.error || "Could not delete message");
+          setStatus("chatStatus", data.error || "Could not delete message", false);
           return;
         }
 
@@ -1128,7 +1144,7 @@ function renderApp() {
         await loadMessages();
         await loadConversations();
       } catch (err) {
-        setStatus("chatStatus", "Delete message failed");
+        setStatus("chatStatus", "Delete message failed", false);
       }
     }
 
@@ -1149,7 +1165,7 @@ function renderApp() {
         const data = await res.json();
 
         if (!res.ok) {
-          setStatus("chatStatus", data.error || "Could not hide chat");
+          setStatus("chatStatus", data.error || "Could not hide chat", false);
           return;
         }
 
@@ -1160,12 +1176,21 @@ function renderApp() {
         document.getElementById("chatEmptyState").classList.remove("hidden");
         await loadConversations();
       } catch (err) {
-        setStatus("chatStatus", "Hide chat failed");
+        setStatus("chatStatus", "Hide chat failed", false);
       }
     }
 
-    bootstrap();
+    document.addEventListener("DOMContentLoaded", function() {
+      document.getElementById("createProfileBtn").addEventListener("click", createProfile);
+      document.getElementById("startChatBtn").addEventListener("click", startChat);
+      document.getElementById("saveProfileBtn").addEventListener("click", updateProfile);
+      document.getElementById("resetDeviceBtn").addEventListener("click", resetThisDevice);
+      document.getElementById("sendMessageBtn").addEventListener("click", sendMessage);
+      document.getElementById("hideChatBtn").addEventListener("click", hideConversation);
+      bootstrap();
+    });
   </script>
 </body>
-</html>`;
+</html>
+`;
 }
