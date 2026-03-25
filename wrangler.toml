@@ -3,5 +3,4 @@ main = "src/index.js"
 compatibility_date = "2026-03-23"
 
 [vars]
-APP_NAME = "Private Chat"
-MAX_FILE_SIZE_BYTES = "3145728"
+APP_NAME = "Private Chat
