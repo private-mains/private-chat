@@ -1,19 +1,16 @@
 # Private Chat
 
-Simple private chat starter built with Cloudflare Workers and D1.
+Simple private messenger without login.
 
-## Features
-- Numeric user number login
-- Profile name
-- Profile picture URL
-- Start private 1-to-1 chat by number
-- Send text messages
-- Edit your messages
-- Delete your messages
-- Hide chat from your side
+## How it works
+- User creates a local profile
+- App generates a unique user number
+- Profile is stored in the current browser
+- Users start chat with each other by user number
 
-## Setup
-1. Create D1 database
-2. Add D1 binding named DB
-3. Run migrations/0001.sql
-4. Deploy to Cloudflare
+## Notes
+- No login screen
+- No email
+- No password
+- Same browser returns automatically
+- If browser storage is cleared, the account is lost
