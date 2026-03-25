@@ -7,8 +7,8 @@ CREATE TABLE users (
   id TEXT PRIMARY KEY,
   user_number TEXT NOT NULL UNIQUE,
   profile_name TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
   profile_picture_url TEXT,
+  device_secret TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL
 );
 
@@ -42,7 +42,8 @@ CREATE TABLE hidden_conversations (
 );
 
 CREATE INDEX idx_users_user_number ON users(user_number);
+CREATE INDEX idx_users_device_secret ON users(device_secret);
 CREATE INDEX idx_conversations_user_a ON conversations(user_a_id);
 CREATE INDEX idx_conversations_user_b ON conversations(user_b_id);
 CREATE INDEX idx_messages_conversation_created ON messages(conversation_id, created_at);
-CREATE INDEX idx_hidden_conversations_user ON hidden_conversations(user_id)
+CREATE INDEX idx_hidden_conversations_user ON hidden_conversations(user_id);
