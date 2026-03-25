@@ -6,30 +6,81 @@ export default {
       return htmlResponse(renderApp());
     }
 
-    if (url.pathname === "/api/register" && request.method === "POST") {
+    if (url.pathname === "/api/bootstrap" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const deviceSecret = String(body.deviceSecret || "").trim();
+
+        if (!deviceSecret) {
+          return json({ error: "Missing device secret" }, 400);
+        }
+
+        const user = await env.DB.prepare(`
+          SELECT id, user_number, profile_name, profile_picture_url
+          FROM users
+          WHERE device_secret = ?
+        `).bind(deviceSecret).first();
+
+        if (!user) {
+          return json({ found: false });
+        }
+
+        return json({
+          found: true,
+          user: {
+            id: user.id,
+            userNumber: user.user_number,
+            profileName: user.profile_name,
+            profilePictureUrl: user.profile_picture_url || ""
+          }
+        });
+      } catch (error) {
+        return json({ error: "Bootstrap failed: " + errMsg(error) }, 500);
+      }
+    }
+
+    if (url.pathname === "/api/create-profile" && request.method === "POST") {
       try {
         const body = await request.json();
         const profileName = String(body.profileName || "").trim();
-        const password = String(body.password || "");
         const profilePictureUrl = String(body.profilePictureUrl || "").trim();
+        const deviceSecret = String(body.deviceSecret || "").trim();
 
-        if (!profileName || !password) {
-          return json({ error: "Profile name and password are required" }, 400);
+        if (!profileName || !deviceSecret) {
+          return json({ error: "Profile name is required" }, 400);
         }
 
-        const userNumber = await generateUserNumber(env.DB);
+        const existing = await env.DB.prepare(`
+          SELECT id, user_number, profile_name, profile_picture_url
+          FROM users
+          WHERE device_secret = ?
+        `).bind(deviceSecret).first();
+
+        if (existing) {
+          return json({
+            success: true,
+            user: {
+              id: existing.id,
+              userNumber: existing.user_number,
+              profileName: existing.profile_name,
+              profilePictureUrl: existing.profile_picture_url || ""
+            }
+          });
+        }
+
         const userId = crypto.randomUUID();
+        const userNumber = await generateUserNumber(env.DB);
         const createdAt = nowIso();
 
         await env.DB.prepare(`
-          INSERT INTO users (id, user_number, profile_name, password_hash, profile_picture_url, created_at)
+          INSERT INTO users (id, user_number, profile_name, profile_picture_url, device_secret, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
         `).bind(
           userId,
           userNumber,
           profileName,
-          password,
           profilePictureUrl || null,
+          deviceSecret,
           createdAt
         ).run();
 
@@ -43,82 +94,30 @@ export default {
           }
         });
       } catch (error) {
-        return json({ error: "Register failed: " + errMsg(error) }, 500);
+        return json({ error: "Create profile failed: " + errMsg(error) }, 500);
       }
     }
 
-    if (url.pathname === "/api/login" && request.method === "POST") {
+    if (url.pathname === "/api/update-profile" && request.method === "POST") {
       try {
         const body = await request.json();
-        const userNumber = String(body.userNumber || "").trim();
-        const password = String(body.password || "");
+        const currentUserId = String(body.currentUserId || "").trim();
+        const profileName = String(body.profileName || "").trim();
+        const profilePictureUrl = String(body.profilePictureUrl || "").trim();
 
-        if (!userNumber || !password) {
-          return json({ error: "User number and password are required" }, 400);
+        if (!currentUserId || !profileName) {
+          return json({ error: "Missing profile data" }, 400);
         }
 
-        const user = await env.DB.prepare(`
-          SELECT id, user_number, profile_name, password_hash, profile_picture_url
-          FROM users
-          WHERE user_number = ?
-        `).bind(userNumber).first();
+        await env.DB.prepare(`
+          UPDATE users
+          SET profile_name = ?, profile_picture_url = ?
+          WHERE id = ?
+        `).bind(profileName, profilePictureUrl || null, currentUserId).run();
 
-        if (!user) {
-          return json({ error: "User not found" }, 404);
-        }
-
-        if (user.password_hash !== password) {
-          return json({ error: "Wrong password" }, 401);
-        }
-
-        return json({
-          success: true,
-          user: {
-            id: user.id,
-            userNumber: user.user_number,
-            profileName: user.profile_name,
-            profilePictureUrl: user.profile_picture_url || ""
-          }
-        });
+        return json({ success: true });
       } catch (error) {
-        return json({ error: "Login failed: " + errMsg(error) }, 500);
-      }
-    }
-
-    if (url.pathname === "/api/user-by-number" && request.method === "GET") {
-      try {
-        const userNumber = String(url.searchParams.get("userNumber") || "").trim();
-        const requesterId = String(url.searchParams.get("requesterId") || "").trim();
-
-        if (!userNumber || !requesterId) {
-          return json({ error: "Missing user number or requester" }, 400);
-        }
-
-        const user = await env.DB.prepare(`
-          SELECT id, user_number, profile_name, profile_picture_url
-          FROM users
-          WHERE user_number = ?
-        `).bind(userNumber).first();
-
-        if (!user) {
-          return json({ error: "User not found" }, 404);
-        }
-
-        if (user.id === requesterId) {
-          return json({ error: "You cannot chat with yourself" }, 400);
-        }
-
-        return json({
-          success: true,
-          user: {
-            id: user.id,
-            userNumber: user.user_number,
-            profileName: user.profile_name,
-            profilePictureUrl: user.profile_picture_url || ""
-          }
-        });
-      } catch (error) {
-        return json({ error: "Search failed: " + errMsg(error) }, 500);
+        return json({ error: "Update profile failed: " + errMsg(error) }, 500);
       }
     }
 
@@ -132,11 +131,6 @@ export default {
           return json({ error: "Missing user data" }, 400);
         }
 
-        const currentUser = await getUserById(env.DB, currentUserId);
-        if (!currentUser) {
-          return json({ error: "Current user not found" }, 404);
-        }
-
         const targetUser = await env.DB.prepare(`
           SELECT id, user_number, profile_name, profile_picture_url
           FROM users
@@ -144,11 +138,11 @@ export default {
         `).bind(targetUserNumber).first();
 
         if (!targetUser) {
-          return json({ error: "Target user not found" }, 404);
+          return json({ error: "User not found" }, 404);
         }
 
         if (targetUser.id === currentUserId) {
-          return json({ error: "You cannot start chat with yourself" }, 400);
+          return json({ error: "You cannot chat with yourself" }, 400);
         }
 
         const ordered = [currentUserId, targetUser.id].sort();
@@ -445,14 +439,6 @@ function errMsg(error) {
   return String(error && error.message ? error.message : error);
 }
 
-async function getUserById(db, userId) {
-  return await db.prepare(`
-    SELECT id, user_number, profile_name, profile_picture_url
-    FROM users
-    WHERE id = ?
-  `).bind(userId).first();
-}
-
 async function canAccessConversation(db, userId, conversationId) {
   const row = await db.prepare(`
     SELECT id
@@ -477,8 +463,7 @@ async function generateUserNumber(db) {
 }
 
 function renderApp() {
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -488,67 +473,89 @@ function renderApp() {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f4f6f8;
+      font-family: Inter, Arial, sans-serif;
+      background: #f3f5f7;
       color: #111827;
     }
     .container {
-      max-width: 1100px;
+      max-width: 1150px;
       margin: 0 auto;
       padding: 18px;
     }
     .topbar {
-      background: #111827;
+      background: linear-gradient(135deg, #111827, #1f2937);
       color: white;
-      padding: 16px 18px;
-      border-radius: 16px;
+      padding: 18px 20px;
+      border-radius: 18px;
       margin-bottom: 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
     }
     .brand {
-      font-size: 22px;
-      font-weight: 700;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
     }
     .sub {
-      font-size: 12px;
+      font-size: 13px;
       color: #d1d5db;
+      margin-top: 4px;
+    }
+    .hidden { display: none !important; }
+    .card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+      padding: 20px;
+    }
+    .welcome {
+      text-align: center;
+      max-width: 520px;
+      margin: 40px auto;
+    }
+    .welcome h2 {
+      margin-top: 0;
+      font-size: 32px;
+    }
+    .welcome p {
+      color: #6b7280;
+      margin-bottom: 20px;
     }
     .layout {
       display: grid;
       grid-template-columns: 320px 1fr;
       gap: 16px;
     }
-    .panel {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-      padding: 16px;
-    }
-    .hidden { display: none !important; }
-    h2, h3 {
-      margin-top: 0;
+    .section-title {
+      margin: 0 0 14px;
+      font-size: 20px;
+      font-weight: 700;
     }
     input, textarea, button {
       width: 100%;
-      padding: 12px;
-      border-radius: 10px;
+      padding: 13px 14px;
+      border-radius: 12px;
       border: 1px solid #d1d5db;
       font-size: 14px;
       margin-bottom: 10px;
     }
     textarea {
+      min-height: 78px;
       resize: vertical;
-      min-height: 70px;
     }
     button {
       border: none;
       cursor: pointer;
       background: #111827;
-      color: #fff;
+      color: white;
+      font-weight: 600;
+    }
+    button:hover {
+      opacity: 0.95;
     }
     button.secondary {
       background: #e5e7eb;
@@ -558,37 +565,32 @@ function renderApp() {
       background: #b91c1c;
       color: white;
     }
-    .two {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
     .status {
       min-height: 18px;
+      margin: 6px 0 12px;
       font-size: 13px;
-      margin: 8px 0 12px;
       color: #b91c1c;
     }
     .ok {
       color: #047857;
     }
-    .user-badge {
-      background: #f3f4f6;
-      border-radius: 12px;
-      padding: 12px;
+    .profile-box {
+      background: #f8fafc;
+      padding: 14px;
+      border-radius: 16px;
       margin-bottom: 14px;
     }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
     .avatar {
-      width: 42px;
-      height: 42px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
       object-fit: cover;
       background: #d1d5db;
-    }
-    .user-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
     }
     .muted {
       color: #6b7280;
@@ -596,38 +598,41 @@ function renderApp() {
     }
     .conversation-item {
       border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 10px;
+      border-radius: 14px;
+      padding: 12px;
       margin-bottom: 10px;
       cursor: pointer;
       background: #fafafa;
+      transition: 0.15s ease;
     }
     .conversation-item:hover {
       background: #f3f4f6;
+      transform: translateY(-1px);
     }
     .chat-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 10px;
-      margin-bottom: 12px;
       flex-wrap: wrap;
+      margin-bottom: 12px;
     }
     .messages {
-      height: 420px;
+      height: 460px;
       overflow-y: auto;
       border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      padding: 12px;
+      border-radius: 16px;
+      padding: 14px;
       background: #f9fafb;
       margin-bottom: 12px;
     }
     .message {
-      max-width: 80%;
+      max-width: 78%;
       padding: 10px 12px;
       border-radius: 14px;
       margin-bottom: 12px;
       word-break: break-word;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
     }
     .mine {
       margin-left: auto;
@@ -655,11 +660,11 @@ function renderApp() {
       font-size: 12px;
     }
     .empty {
-      color: #6b7280;
-      padding: 20px 0;
       text-align: center;
+      color: #6b7280;
+      padding: 22px 0;
     }
-    @media (max-width: 900px) {
+    @media (max-width: 920px) {
       .layout {
         grid-template-columns: 1fr;
       }
@@ -676,63 +681,55 @@ function renderApp() {
         <div class="brand">Private Chat</div>
         <div class="sub">Simple private messenger</div>
       </div>
-      <div id="topUserInfo" class="sub">Not logged in</div>
+      <div id="topUserInfo" class="sub">Setting up...</div>
     </div>
 
-    <div id="authPanel" class="panel">
-      <h2>Create account or login</h2>
-      <div class="status" id="authStatus"></div>
-
-      <div class="two">
-        <div>
-          <h3>Create Account</h3>
-          <input id="registerProfileName" placeholder="Profile name" />
-          <input id="registerProfilePictureUrl" placeholder="Profile picture URL (optional)" />
-          <input id="registerPassword" type="password" placeholder="Password" />
-          <button onclick="registerUser()">Create Account</button>
-        </div>
-
-        <div>
-          <h3>Login</h3>
-          <input id="loginUserNumber" placeholder="User number" />
-          <input id="loginPassword" type="password" placeholder="Password" />
-          <button onclick="loginUser()">Login</button>
-        </div>
-      </div>
+    <div id="setupPanel" class="card welcome hidden">
+      <h2>Welcome to Private Chat</h2>
+      <p>Create your profile once on this device and start chatting by user number.</p>
+      <div class="status" id="setupStatus"></div>
+      <input id="setupProfileName" placeholder="Your profile name" />
+      <input id="setupProfilePictureUrl" placeholder="Profile picture URL (optional)" />
+      <button onclick="createProfile()">Continue</button>
     </div>
 
     <div id="appPanel" class="layout hidden">
-      <div class="panel">
-        <div class="user-badge">
-          <div class="user-row">
+      <div class="card">
+        <div class="profile-box">
+          <div class="row">
             <img id="myAvatar" class="avatar" alt="avatar" />
             <div>
               <div id="myProfileName"><strong></strong></div>
-              <div class="muted">User number: <span id="myUserNumber"></span></div>
+              <div class="muted">Your user number: <span id="myUserNumber"></span></div>
             </div>
           </div>
         </div>
 
         <div class="status" id="leftStatus"></div>
 
-        <h3>Start Chat</h3>
+        <div class="section-title">Start chat</div>
         <input id="startChatUserNumber" placeholder="Enter user number" />
-        <button onclick="startChat()">Start chat</button>
+        <button onclick="startChat()">Open chat</button>
 
-        <h3>Your Chats</h3>
+        <div class="section-title" style="margin-top:16px;">Edit profile</div>
+        <input id="editProfileName" placeholder="Profile name" />
+        <input id="editProfilePictureUrl" placeholder="Profile picture URL" />
+        <button class="secondary" onclick="updateProfile()">Save profile</button>
+
+        <div class="section-title" style="margin-top:16px;">Your chats</div>
         <div id="conversationList"></div>
 
-        <button class="secondary" onclick="logoutUser()">Logout</button>
+        <button class="danger" style="margin-top:10px;" onclick="resetThisDevice()">Reset this device</button>
       </div>
 
-      <div class="panel">
+      <div class="card">
         <div id="chatEmptyState" class="empty">
-          Select a chat or start a new one.
+          Open a chat by user number.
         </div>
 
         <div id="chatPanel" class="hidden">
           <div class="chat-header">
-            <div class="user-row">
+            <div class="row">
               <img id="chatAvatar" class="avatar" alt="chat avatar" />
               <div>
                 <div id="chatName"><strong></strong></div>
@@ -745,7 +742,6 @@ function renderApp() {
           </div>
 
           <div class="status" id="chatStatus"></div>
-
           <div id="messagesBox" class="messages"></div>
 
           <textarea id="messageInput" placeholder="Type your message"></textarea>
@@ -759,6 +755,15 @@ function renderApp() {
     let currentUser = null;
     let currentConversationId = null;
     let currentChatTarget = null;
+
+    function getDeviceSecret() {
+      let secret = localStorage.getItem("privateChatDeviceSecret");
+      if (!secret) {
+        secret = "pc_" + crypto.randomUUID();
+        localStorage.setItem("privateChatDeviceSecret", secret);
+      }
+      return secret;
+    }
 
     function setStatus(id, text, ok = false) {
       const el = document.getElementById(id);
@@ -779,100 +784,117 @@ function renderApp() {
       return url && url.trim() ? url.trim() : "https://via.placeholder.com/64?text=U";
     }
 
-    function saveSession() {
-      if (currentUser) {
-        localStorage.setItem("privateChatUser", JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem("privateChatUser");
+    async function bootstrap() {
+      try {
+        const res = await fetch("/api/bootstrap", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deviceSecret: getDeviceSecret() })
+        });
+
+        const data = await res.json();
+
+        if (data.found && data.user) {
+          currentUser = data.user;
+          showApp();
+          return;
+        }
+
+        showSetup();
+      } catch (err) {
+        showSetup();
       }
     }
 
-    function loadSession() {
-      try {
-        const raw = localStorage.getItem("privateChatUser");
-        if (!raw) return;
-        currentUser = JSON.parse(raw);
-        showApp();
-      } catch (_) {}
+    function showSetup() {
+      document.getElementById("setupPanel").classList.remove("hidden");
+      document.getElementById("appPanel").classList.add("hidden");
+      document.getElementById("topUserInfo").textContent = "Create your profile";
     }
 
     function showApp() {
-      document.getElementById("authPanel").classList.add("hidden");
+      document.getElementById("setupPanel").classList.add("hidden");
       document.getElementById("appPanel").classList.remove("hidden");
 
       document.getElementById("myProfileName").innerHTML = "<strong>" + escapeHtml(currentUser.profileName) + "</strong>";
       document.getElementById("myUserNumber").textContent = currentUser.userNumber;
       document.getElementById("myAvatar").src = avatarValue(currentUser.profilePictureUrl);
+      document.getElementById("editProfileName").value = currentUser.profileName || "";
+      document.getElementById("editProfilePictureUrl").value = currentUser.profilePictureUrl || "";
       document.getElementById("topUserInfo").textContent = currentUser.profileName + " • " + currentUser.userNumber;
 
       loadConversations();
     }
 
-    function logoutUser() {
-      currentUser = null;
-      currentConversationId = null;
-      currentChatTarget = null;
-      saveSession();
+    async function createProfile() {
+      try {
+        setStatus("setupStatus", "");
+
+        const profileName = document.getElementById("setupProfileName").value.trim();
+        const profilePictureUrl = document.getElementById("setupProfilePictureUrl").value.trim();
+
+        const res = await fetch("/api/create-profile", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            profileName,
+            profilePictureUrl,
+            deviceSecret: getDeviceSecret()
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setStatus("setupStatus", data.error || "Could not create profile");
+          return;
+        }
+
+        currentUser = data.user;
+        showApp();
+        setStatus("leftStatus", "Your user number is " + currentUser.userNumber, true);
+      } catch (err) {
+        setStatus("setupStatus", "Create profile failed");
+      }
+    }
+
+    async function updateProfile() {
+      try {
+        setStatus("leftStatus", "");
+
+        const profileName = document.getElementById("editProfileName").value.trim();
+        const profilePictureUrl = document.getElementById("editProfilePictureUrl").value.trim();
+
+        const res = await fetch("/api/update-profile", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            currentUserId: currentUser.id,
+            profileName,
+            profilePictureUrl
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setStatus("leftStatus", data.error || "Could not update profile");
+          return;
+        }
+
+        currentUser.profileName = profileName;
+        currentUser.profilePictureUrl = profilePictureUrl;
+        showApp();
+        setStatus("leftStatus", "Profile updated", true);
+      } catch (err) {
+        setStatus("leftStatus", "Update profile failed");
+      }
+    }
+
+    function resetThisDevice() {
+      if (!confirm("Reset this device profile? This will remove local access on this browser.")) return;
+      localStorage.removeItem("privateChatDeviceSecret");
       location.reload();
-    }
-
-    async function registerUser() {
-      try {
-        setStatus("authStatus", "");
-
-        const profileName = document.getElementById("registerProfileName").value.trim();
-        const profilePictureUrl = document.getElementById("registerProfilePictureUrl").value.trim();
-        const password = document.getElementById("registerPassword").value;
-
-        const res = await fetch("/api/register", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ profileName, profilePictureUrl, password })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          setStatus("authStatus", data.error || "Register failed");
-          return;
-        }
-
-        currentUser = data.user;
-        saveSession();
-        setStatus("authStatus", "Account created. Your user number is " + data.user.userNumber, true);
-        showApp();
-      } catch (err) {
-        setStatus("authStatus", "Register request failed");
-      }
-    }
-
-    async function loginUser() {
-      try {
-        setStatus("authStatus", "");
-
-        const userNumber = document.getElementById("loginUserNumber").value.trim();
-        const password = document.getElementById("loginPassword").value;
-
-        const res = await fetch("/api/login", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userNumber, password })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          setStatus("authStatus", data.error || "Login failed");
-          return;
-        }
-
-        currentUser = data.user;
-        saveSession();
-        setStatus("authStatus", "Login successful", true);
-        showApp();
-      } catch (err) {
-        setStatus("authStatus", "Login request failed");
-      }
     }
 
     async function startChat() {
@@ -903,8 +925,8 @@ function renderApp() {
 
         currentConversationId = data.conversationId;
         currentChatTarget = data.targetUser;
-        setStatus("leftStatus", "Chat opened", true);
         document.getElementById("startChatUserNumber").value = "";
+        setStatus("leftStatus", "Chat opened", true);
         await loadConversations();
         await openChat(currentConversationId, currentChatTarget);
       } catch (err) {
@@ -1019,7 +1041,7 @@ function renderApp() {
 
         const message = document.getElementById("messageInput").value.trim();
         if (!currentConversationId) {
-          setStatus("chatStatus", "Open a conversation first");
+          setStatus("chatStatus", "Open a chat first");
           return;
         }
         if (!message) {
@@ -1142,9 +1164,8 @@ function renderApp() {
       }
     }
 
-    loadSession();
+    bootstrap();
   </script>
 </body>
-</html>
-`;
+</html>`;
 }
