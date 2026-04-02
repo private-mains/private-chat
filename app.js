@@ -1,35 +1,36 @@
-async function register() {
-  const name = document.getElementById("name").value;
-  const password = document.getElementById("password").value;
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
 
-  const res = await fetch("/api/register", {
-    method: "POST",
-    body: JSON.stringify({ name, password })
-  });
+    if (url.pathname === "/api/register" && request.method === "POST") {
+      const { name, password } = await request.json();
 
-  const data = await res.json();
+      const userNumber = Math.floor(1000000 + Math.random() * 9000000).toString();
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
 
-  if (data.success) {
-    alert("Your number: " + data.userNumber);
-  } else {
-    alert("Failed");
+      await env.DB.prepare(`
+        INSERT INTO users (id, user_number, profile_name, device_secret, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(id, userNumber, name, password, now).run();
+
+      return Response.json({ success: true, userNumber });
+    }
+
+    if (url.pathname === "/api/login" && request.method === "POST") {
+      const { userNumber, password } = await request.json();
+
+      const user = await env.DB.prepare(`
+        SELECT * FROM users WHERE user_number = ? AND device_secret = ?
+      `).bind(userNumber, password).first();
+
+      if (!user) {
+        return Response.json({ success: false });
+      }
+
+      return Response.json({ success: true, user });
+    }
+
+    return new Response("API running");
   }
-}
-
-async function login() {
-  const userNumber = document.getElementById("loginNumber").value;
-  const password = document.getElementById("loginPassword").value;
-
-  const res = await fetch("/api/login", {
-    method: "POST",
-    body: JSON.stringify({ userNumber, password })
-  });
-
-  const data = await res.json();
-
-  if (data.success) {
-    document.getElementById("result").innerText = "Logged in!";
-  } else {
-    alert("Invalid login");
-  }
-}
+};
