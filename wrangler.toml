@@ -1,6 +1,8 @@
 name = "private-chat"
 main = "src/index.js"
-compatibility_date = "2026-03-23"
+compatibility_date = "2024-01-01"
 
-[vars]
-APP_NAME = "Private Chat"
+[[d1_databases]]
+binding = "DB"
+database_name = "private-chat-db"
+database_id = "PUT_YOUR_REAL_ID_HERE"
