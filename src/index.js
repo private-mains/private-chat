@@ -10,13 +10,15 @@ export default {
 
     if (url.pathname === "/api/register" && request.method === "POST") {
       try {
-        const { profileName, password } = await request.json();
+        const body = await request.json();
+        const profileName = String(body.profileName || "").trim();
+        const password = String(body.password || "").trim();
 
-        const cleanName = String(profileName || "").trim();
-        const cleanPassword = String(password || "").trim();
-
-        if (!cleanName || !cleanPassword) {
-          return json({ success: false, error: "Name and password are required" }, 400);
+        if (!profileName || !password) {
+          return json({
+            success: false,
+            error: "Name and password are required"
+          }, 400);
         }
 
         let userNumber = "";
@@ -38,11 +40,11 @@ export default {
         await env.DB.prepare(`
           INSERT INTO users (id, user_number, profile_name, device_secret, created_at)
           VALUES (?, ?, ?, ?, ?)
-        `).bind(id, userNumber, cleanName, cleanPassword, now).run();
+        `).bind(id, userNumber, profileName, password, now).run();
 
         return json({
           success: true,
-          userNumber,
+          userNumber: userNumber,
           message: "Account created successfully"
         });
       } catch (e) {
@@ -55,28 +57,33 @@ export default {
 
     if (url.pathname === "/api/login" && request.method === "POST") {
       try {
-        const { userNumber, password } = await request.json();
+        const body = await request.json();
+        const userNumber = String(body.userNumber || "").trim();
+        const password = String(body.password || "").trim();
 
-        const cleanUserNumber = String(userNumber || "").trim();
-        const cleanPassword = String(password || "").trim();
-
-        if (!cleanUserNumber || !cleanPassword) {
-          return json({ success: false, error: "User number and password are required" }, 400);
+        if (!userNumber || !password) {
+          return json({
+            success: false,
+            error: "User number and password are required"
+          }, 400);
         }
 
         const user = await env.DB.prepare(`
           SELECT id, user_number, profile_name, created_at
           FROM users
           WHERE user_number = ? AND device_secret = ?
-        `).bind(cleanUserNumber, cleanPassword).first();
+        `).bind(userNumber, password).first();
 
         if (!user) {
-          return json({ success: false, error: "Invalid user number or password" }, 401);
+          return json({
+            success: false,
+            error: "Invalid user number or password"
+          }, 401);
         }
 
         return json({
           success: true,
-          user
+          user: user
         });
       } catch (e) {
         return json({
@@ -92,7 +99,7 @@ export default {
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
-    status,
+    status: status,
     headers: {
       "content-type": "application/json; charset=UTF-8"
     }
@@ -243,7 +250,10 @@ function htmlPage() {
         const res = await fetch("/api/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ profileName, password })
+          body: JSON.stringify({
+            profileName: profileName,
+            password: password
+          })
         });
 
         const data = await res.json();
@@ -271,7 +281,10 @@ function htmlPage() {
         const res = await fetch("/api/login", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userNumber, password })
+          body: JSON.stringify({
+            userNumber: userNumber,
+            password: password
+          })
         });
 
         const data = await res.json();
